@@ -4,9 +4,9 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { checkCompliance, demoExtraction } = require('../utils/ruleEngine');
 const { adaptPythonReportToScanResult } = require('../utils/pythonReportAdapter');
 const { generateComplianceReport } = require('../utils/pdfReport');
+const { runPythonCompliance } = require('../utils/pythonBridge');
 
 const router = express.Router();
 
@@ -29,62 +29,39 @@ const upload = multer({
   }
 });
 
-/**
- * POST /api/scan-label
- * multipart/form-data:
- *   - image: the label photo (required)
- *   - productTitle, brand, category, packType, batchNumber, barcode: optional text fields
- *   - submittedBy: 'seller' | 'consumer' (default 'consumer')
- *   - extractedFields: optional JSON string - see utils/ruleEngine.js for the contract.
- *       Once the OCR/rule-engine teammate's service is ready, either have it call
- *       this field directly, or run OCR upstream and forward the JSON here.
- */
-router.post('/scan-label', upload.single('image'), (req, res) => {
+router.post('/scan-label', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'An image file is required (field name: "image").' });
     }
 
     const body = req.body || {};
-    let result;
     let meta = {};
 
-    if (body.pythonReport) {
+    if (body.extractedFields) {
       try {
-        const parsedReport = JSON.parse(body.pythonReport);
-        const allowedDecisions = ['COMPLIANT', 'NON_COMPLIANT', 'NEEDS_REVIEW'];
-        if (!parsedReport || typeof parsedReport !== 'object' || Array.isArray(parsedReport)) {
-          return res.status(400).json({ error: 'pythonReport must be a JSON object.' });
-        }
-        if (!parsedReport.overall_decision || !allowedDecisions.includes(parsedReport.overall_decision)) {
-          return res.status(400).json({ error: 'pythonReport.overall_decision must be one of: COMPLIANT, NON_COMPLIANT, NEEDS_REVIEW.' });
-        }
-        result = adaptPythonReportToScanResult(parsedReport);
+        const parsed = JSON.parse(body.extractedFields);
+        meta = {
+          principalDisplayAreaCm2: parsed.principalDisplayAreaCm2 ? Number(parsed.principalDisplayAreaCm2) : undefined,
+          detectedFontHeightMm: parsed.detectedFontHeightMm ? Number(parsed.detectedFontHeightMm) : undefined,
+          isImported: parsed.isImported === true,
+          administeredPriceMechanism: parsed.administeredPriceMechanism === true
+        };
       } catch (e) {
-        return res.status(400).json({ error: 'pythonReport must be valid JSON.' });
+        return res.status(400).json({ error: 'extractedFields must be valid JSON.' });
       }
-    } else {
-      let extractedFields;
-      if (body.extractedFields) {
-        try {
-          const parsed = JSON.parse(body.extractedFields);
-          extractedFields = parsed.extractedFields || parsed;
-          meta = {
-            principalDisplayAreaCm2: parsed.principalDisplayAreaCm2 ? Number(parsed.principalDisplayAreaCm2) : undefined,
-            detectedFontHeightMm: parsed.detectedFontHeightMm ? Number(parsed.detectedFontHeightMm) : undefined,
-            isImported: parsed.isImported === true,
-            administeredPriceMechanism: parsed.administeredPriceMechanism === true
-          };
-        } catch (e) {
-          return res.status(400).json({ error: 'extractedFields must be valid JSON.' });
-        }
-      } else {
-        // No OCR output supplied yet - fall back to a deterministic demo extraction
-        // so the rest of the pipeline (DB, PDF, authority portal) is fully testable.
-        extractedFields = demoExtraction(req.file.originalname);
-      }
-      result = checkCompliance(extractedFields, meta, body.category);
     }
+
+    let parsedReport;
+    try {
+      parsedReport = await runPythonCompliance(req.file.path);
+    } catch (e) {
+      console.error('Python bridge error:', e.message);
+      return res.status(500).json({ error: 'Internal pipeline error during compliance analysis.' });
+    }
+
+    const result = adaptPythonReportToScanResult(parsedReport);
+
     const id = `LM-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const timestamp = new Date().toISOString();
     const imageUrl = `/uploads/${req.file.filename}`;
@@ -130,8 +107,6 @@ router.post('/scan-label', upload.single('image'), (req, res) => {
       )
     `).run(scanRow);
 
-    // Auto-generate a failure/improvement PDF report and flag it for the
-    // authority portal whenever a product fails the check.
     if (result.overallStatus === 'NON_COMPLIANT' || result.overallStatus === 'FLAGGED_REVIEW') {
       const reportPath = generateComplianceReport(scanRow);
       db.prepare('UPDATE scans SET reportPath = ? WHERE id = ?').run(reportPath, id);
@@ -145,7 +120,6 @@ router.post('/scan-label', upload.single('image'), (req, res) => {
   }
 });
 
-// GET /api/scan-label/:id - fetch a single scan result by id
 router.get('/scan-label/:id', (req, res) => {
   const row = db.prepare('SELECT * FROM scans WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Scan not found.' });
