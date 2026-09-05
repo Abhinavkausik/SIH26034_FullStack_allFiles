@@ -5,6 +5,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { checkCompliance, demoExtraction } = require('../utils/ruleEngine');
+const { adaptPythonReportToScanResult } = require('../utils/pythonReportAdapter');
 const { generateComplianceReport } = require('../utils/pdfReport');
 
 const router = express.Router();
@@ -45,29 +46,45 @@ router.post('/scan-label', upload.single('image'), (req, res) => {
     }
 
     const body = req.body || {};
-    let extractedFields;
+    let result;
     let meta = {};
 
-    if (body.extractedFields) {
+    if (body.pythonReport) {
       try {
-        const parsed = JSON.parse(body.extractedFields);
-        extractedFields = parsed.extractedFields || parsed;
-        meta = {
-          principalDisplayAreaCm2: parsed.principalDisplayAreaCm2 ? Number(parsed.principalDisplayAreaCm2) : undefined,
-          detectedFontHeightMm: parsed.detectedFontHeightMm ? Number(parsed.detectedFontHeightMm) : undefined,
-          isImported: parsed.isImported === true,
-          administeredPriceMechanism: parsed.administeredPriceMechanism === true
-        };
+        const parsedReport = JSON.parse(body.pythonReport);
+        const allowedDecisions = ['COMPLIANT', 'NON_COMPLIANT', 'NEEDS_REVIEW'];
+        if (!parsedReport || typeof parsedReport !== 'object' || Array.isArray(parsedReport)) {
+          return res.status(400).json({ error: 'pythonReport must be a JSON object.' });
+        }
+        if (!parsedReport.overall_decision || !allowedDecisions.includes(parsedReport.overall_decision)) {
+          return res.status(400).json({ error: 'pythonReport.overall_decision must be one of: COMPLIANT, NON_COMPLIANT, NEEDS_REVIEW.' });
+        }
+        result = adaptPythonReportToScanResult(parsedReport);
       } catch (e) {
-        return res.status(400).json({ error: 'extractedFields must be valid JSON.' });
+        return res.status(400).json({ error: 'pythonReport must be valid JSON.' });
       }
     } else {
-      // No OCR output supplied yet - fall back to a deterministic demo extraction
-      // so the rest of the pipeline (DB, PDF, authority portal) is fully testable.
-      extractedFields = demoExtraction(req.file.originalname);
+      let extractedFields;
+      if (body.extractedFields) {
+        try {
+          const parsed = JSON.parse(body.extractedFields);
+          extractedFields = parsed.extractedFields || parsed;
+          meta = {
+            principalDisplayAreaCm2: parsed.principalDisplayAreaCm2 ? Number(parsed.principalDisplayAreaCm2) : undefined,
+            detectedFontHeightMm: parsed.detectedFontHeightMm ? Number(parsed.detectedFontHeightMm) : undefined,
+            isImported: parsed.isImported === true,
+            administeredPriceMechanism: parsed.administeredPriceMechanism === true
+          };
+        } catch (e) {
+          return res.status(400).json({ error: 'extractedFields must be valid JSON.' });
+        }
+      } else {
+        // No OCR output supplied yet - fall back to a deterministic demo extraction
+        // so the rest of the pipeline (DB, PDF, authority portal) is fully testable.
+        extractedFields = demoExtraction(req.file.originalname);
+      }
+      result = checkCompliance(extractedFields, meta, body.category);
     }
-
-    const result = checkCompliance(extractedFields, meta, body.category);
     const id = `LM-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const timestamp = new Date().toISOString();
     const imageUrl = `/uploads/${req.file.filename}`;
@@ -78,7 +95,7 @@ router.post('/scan-label', upload.single('image'), (req, res) => {
       timestamp,
       productTitle: body.productTitle || req.file.originalname.replace(/\.[^/.]+$/, ''),
       brand: body.brand || null,
-      category: body.category || null,
+      category: body.category || (result.category || null),
       packType: body.packType || null,
       batchNumber: body.batchNumber || null,
       barcode: body.barcode || null,
@@ -91,9 +108,9 @@ router.post('/scan-label', upload.single('image'), (req, res) => {
       minimumFontHeightMm: null,
       detectedFontHeightMm: meta.detectedFontHeightMm ?? null,
       isFontCompliant: typeof result.isFontCompliant === 'boolean' ? (result.isFontCompliant ? 1 : 0) : null,
-      inspectorNotes: null,
+      inspectorNotes: result.inspectorNotes || null,
       inspectionMemoNumber: null,
-      estimatedStatutoryFine: result.estimatedStatutoryFine,
+      estimatedStatutoryFine: result.estimatedStatutoryFine || null,
       submittedBy,
       reportPath: null,
       actionStatus: 'PENDING'

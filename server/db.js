@@ -33,7 +33,7 @@ db.exec(`
     barcode TEXT,
     imageUrl TEXT,
     overallStatus TEXT NOT NULL,
-    complianceScore INTEGER NOT NULL,
+    complianceScore INTEGER,
     checkedFields TEXT NOT NULL,      -- JSON: FieldComplianceResult[]
     violations TEXT NOT NULL,          -- JSON: RuleClauseViolation[]
     principalDisplayAreaCm2 REAL,
