@@ -29,13 +29,13 @@ def main():
         pipeline = OCRPipeline()
         json_out = pipeline.process_image(image_path, save_debug=False)
         structured_data = StructuredExtractionResult.model_validate_json(json_out)
-        
+
         normalized = normalize_product_fields(structured_data.fields)
         cat_result = classify_category(normalized)
-        
+
         filename = os.path.basename(image_path)
         warnings = getattr(structured_data, "warnings", [])
-        
+
         final_report = run_compliance_pipeline(
             product_id=filename,
             normalized_fields=normalized,
@@ -43,12 +43,25 @@ def main():
             sub_category=cat_result.sub_category,
             warnings=warnings
         )
-        
+
+        # Attach image dimensions so the Node adapter can convert pixel bboxes
+        # to percentage coordinates without inventing values.
+        try:
+            import cv2 as _cv2
+            _img = _cv2.imread(image_path)
+            if _img is not None:
+                _h, _w = _img.shape[:2]
+                if isinstance(final_report, dict):
+                    final_report["image_width_px"] = _w
+                    final_report["image_height_px"] = _h
+        except Exception:
+            pass  # Non-fatal: Node adapter will omit bbox when dimensions absent
+
         if isinstance(final_report, dict):
             print(json.dumps(final_report, indent=4))
         else:
             print(final_report.model_dump_json(indent=4))
-            
+
         sys.exit(0)
     except Exception as e:
         sys.stderr.write(f"Pipeline error: {str(e)}\n")
@@ -56,5 +69,5 @@ def main():
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
