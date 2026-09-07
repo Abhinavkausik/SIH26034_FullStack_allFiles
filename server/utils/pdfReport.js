@@ -5,6 +5,17 @@ const PDFDocument = require('pdfkit');
 const REPORTS_DIR = path.join(__dirname, '..', 'reports');
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
+function shouldGenerateReport(status) {
+  return status === 'NON_COMPLIANT' || status === 'FLAGGED_REVIEW' || status === 'NEEDS_REVIEW';
+}
+
+function formatComplianceScore(score) {
+  if (score === null || score === undefined) {
+    return 'Not calculated';
+  }
+  return `${score}/100`;
+}
+
 /**
  * Generates a "Non-Compliance & Improvement Analysis Report" PDF for a scan
  * and writes it to disk. Returns the relative file path (under /reports).
@@ -35,7 +46,7 @@ function generateComplianceReport(scan) {
   if (scan.barcode) doc.text(`Barcode: ${scan.barcode}`);
   doc.moveDown(0.5);
   doc.font('Helvetica-Bold').fillColor('#B23A2E')
-    .text(`Overall Status: ${scan.overallStatus}    Compliance Score: ${scan.complianceScore}/100`);
+    .text(`Overall Status: ${scan.overallStatus}    Compliance Score: ${formatComplianceScore(scan.complianceScore)}`);
   doc.fillColor('black').text(`Estimated Statutory Fine Exposure: ${scan.estimatedStatutoryFine}`);
   doc.moveDown(1);
 
@@ -98,4 +109,4 @@ function generateComplianceReport(scan) {
   return `/reports/${fileName}`;
 }
 
-module.exports = { generateComplianceReport, REPORTS_DIR };
+module.exports = { generateComplianceReport, shouldGenerateReport, formatComplianceScore, REPORTS_DIR };

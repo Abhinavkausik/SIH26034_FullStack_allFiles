@@ -138,9 +138,16 @@ function getRuleById(ruleId) {
 }
 
 function getRuleByClause(clauseId) {
-  return LEGAL_METROLOGY_RULES_2011.find(
-    r => r.clause.toLowerCase() === String(clauseId).toLowerCase() || r.id === clauseId
-  );
+  if (!clauseId) return undefined;
+  const target = String(clauseId).toLowerCase().trim();
+  const exact = LEGAL_METROLOGY_RULES_2011.find(r => {
+    return r.clause.toLowerCase() === target || r.id.toLowerCase() === target;
+  });
+  if (exact) return exact;
+  return LEGAL_METROLOGY_RULES_2011.find(r => {
+    const clause = r.clause.toLowerCase();
+    return clause.includes(target) || target.includes(clause);
+  });
 }
 
 module.exports = {

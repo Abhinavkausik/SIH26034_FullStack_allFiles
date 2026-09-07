@@ -5,7 +5,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { adaptPythonReportToScanResult } = require('../utils/pythonReportAdapter');
-const { generateComplianceReport } = require('../utils/pdfReport');
+const { generateComplianceReport, shouldGenerateReport } = require('../utils/pdfReport');
 const { runPythonCompliance } = require('../utils/pythonBridge');
 
 const router = express.Router();
@@ -107,7 +107,7 @@ router.post('/scan-label', upload.single('image'), async (req, res) => {
       )
     `).run(scanRow);
 
-    if (result.overallStatus === 'NON_COMPLIANT' || result.overallStatus === 'FLAGGED_REVIEW') {
+    if (shouldGenerateReport(result.overallStatus)) {
       const reportPath = generateComplianceReport(scanRow);
       db.prepare('UPDATE scans SET reportPath = ? WHERE id = ?').run(reportPath, id);
       scanRow.reportPath = reportPath;

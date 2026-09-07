@@ -102,5 +102,14 @@ export const LEGAL_METROLOGY_RULES_2011: LegalRuleDetail[] = [
 ];
 
 export function getRuleByClause(clauseId: string): LegalRuleDetail | undefined {
-  return LEGAL_METROLOGY_RULES_2011.find(r => r.clause.toLowerCase() === clauseId.toLowerCase() || r.id === clauseId);
+  if (!clauseId) return undefined;
+  const target = clauseId.toLowerCase().trim();
+  const exact = LEGAL_METROLOGY_RULES_2011.find(r => {
+    return r.clause.toLowerCase() === target || r.id.toLowerCase() === target;
+  });
+  if (exact) return exact;
+  return LEGAL_METROLOGY_RULES_2011.find(r => {
+    const clause = r.clause.toLowerCase();
+    return clause.includes(target) || target.includes(clause);
+  });
 }

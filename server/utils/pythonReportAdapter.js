@@ -1,3 +1,5 @@
+const { FIELD_RULE_MAP, getRuleById, getRuleByClause } = require('../data/legalMetrologyRules');
+
 /**
  * Adapts the Python AI compliance report to the frontend expected ScanResult format.
  *
@@ -104,6 +106,18 @@ function normalizeCategory(rawCat) {
   return null;
 }
 
+function resolveRuleMetadata(fieldStr, ruleClause) {
+  let rule = null;
+  if (ruleClause) {
+    rule = getRuleByClause(ruleClause) || getRuleById(ruleClause);
+  }
+  const ruleMeta = FIELD_RULE_MAP[fieldStr];
+  if (!rule && ruleMeta && ruleMeta.ruleId) {
+    rule = getRuleById(ruleMeta.ruleId);
+  }
+  return { rule, ruleMeta };
+}
+
 function adaptPythonReportToScanResult(pythonReport) {
   const overallStatus = pythonReport.overall_decision || "FLAGGED_REVIEW";
   const imgW = pythonReport.image_width_px || 0;
@@ -117,16 +131,18 @@ function adaptPythonReportToScanResult(pythonReport) {
   };
 
   const createField = (fieldStr, status, explanation) => {
+    const { rule, ruleMeta } = resolveRuleMetadata(fieldStr, null);
+    const ruleReference = rule ? rule.clause : (ruleMeta ? ruleMeta.ruleId : "");
     return {
       fieldId: fieldStr,
       fieldName: formatFieldName(fieldStr),
-      ruleReference: "",
+      ruleReference: ruleReference,
       status: status,
       isPresent: status === "FOUND",
       isMalformed: status === "LOW_CONFIDENCE",
-      expectedFormat: "",
+      expectedFormat: ruleMeta ? ruleMeta.expectedFormat : "",
       explanation: explanation,
-      severity: "LOW"
+      severity: ruleMeta ? ruleMeta.severity : "LOW"
     };
   };
 
@@ -140,16 +156,19 @@ function adaptPythonReportToScanResult(pythonReport) {
     const label = formatFieldName(obj.field);
     const boundingBox = extractBoundingBox(obj.evidence || [], imgW, imgH, label, isCompliant);
 
+    const { rule, ruleMeta } = resolveRuleMetadata(obj.field, obj.rule_clause);
+    const ruleReference = obj.rule_clause || (rule ? rule.clause : (ruleMeta ? ruleMeta.ruleId : ""));
+
     return {
       fieldId: obj.field || "",
       fieldName: label,
-      ruleReference: obj.rule_clause || "",
+      ruleReference: ruleReference,
       status: finalStatus,
       isPresent: finalStatus === "FOUND",
       isMalformed: finalStatus === "LOW_CONFIDENCE",
-      expectedFormat: "",
+      expectedFormat: ruleMeta ? ruleMeta.expectedFormat : "",
       explanation: obj.message || "",
-      severity: "MEDIUM",
+      severity: ruleMeta ? ruleMeta.severity : "MEDIUM",
       boundingBox: boundingBox || undefined
     };
   };
@@ -170,19 +189,31 @@ function adaptPythonReportToScanResult(pythonReport) {
     checkedFields.push(createField(f, "NOT_APPLICABLE", "Not applicable"));
   });
 
-  const violations = (pythonReport.violations || []).map(v => ({
-    clauseId: v.rule_clause || "",
-    clauseTitle: formatFieldName(v.field),
-    ruleBook: "",
-    description: "",
-    violationReason: v.message || "",
-    mandatoryRequirement: "",
-    statutoryAct: "",
-    penaltyDescription: "",
-    penaltySection: "",
-    severity: "MEDIUM",
-    remediationAdvice: ""
-  }));
+  const violations = (pythonReport.violations || []).map(v => {
+    const { rule, ruleMeta } = resolveRuleMetadata(v.field, v.rule_clause);
+    const clauseId = v.rule_clause || (rule ? rule.clause : (ruleMeta ? ruleMeta.ruleId : ""));
+    const clauseTitle = formatFieldName(v.field) || (rule ? rule.title : "");
+    const mandatoryRequirement = (rule && rule.mandatoryRequirement) || (ruleMeta && ruleMeta.expectedFormat) || "";
+    const statutoryAct = (rule && rule.statutoryAct) || "";
+    const penaltySection = (rule && rule.penaltySection) || "";
+    const penaltyDescription = (rule && rule.penaltyDescription) || "";
+    const remediationAdvice = (rule && rule.remediationAdvice) || "";
+    const severity = (ruleMeta && ruleMeta.severity) || "MEDIUM";
+
+    return {
+      clauseId,
+      clauseTitle,
+      ruleBook: "Legal Metrology (Packaged Commodities) Rules, 2011",
+      description: (rule && rule.mandatoryRequirement) || "",
+      violationReason: v.message || "",
+      mandatoryRequirement,
+      statutoryAct,
+      penaltyDescription,
+      penaltySection,
+      severity,
+      remediationAdvice
+    };
+  });
 
   let inspectorNotes = null;
   if (pythonReport.summary) {
