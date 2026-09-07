@@ -4,7 +4,8 @@ export type MandatoryFieldId =
   | 'manufacturer_details'
   | 'consumer_care'
   | 'date_of_manufacture'
-  | 'country_of_origin';
+  | 'country_of_origin'
+  | 'unit_sale_price';
 
 export type ComplianceStatus = 'COMPLIANT' | 'NON_COMPLIANT' | 'FLAGGED_REVIEW';
 
@@ -55,7 +56,7 @@ export interface ScanResult {
   timestamp: string;
   productTitle: string;
   brand: string;
-  category: 'Food & FMCG' | 'Cosmetics & Personal Care' | 'Electronics' | 'Pharmaceuticals & OTC' | 'Apparel & Textiles' | 'Commodities & Grains';
+  category: 'Food & FMCG' | 'Cosmetics & Personal Care' | 'Electronics' | 'Pharmaceuticals & OTC' | 'Apparel & Textiles' | 'Commodities & Grains' | 'General' | null;
   packType: 'Pouch' | 'Bottle/Jar' | 'Carton Box' | 'Tin/Can' | 'E-commerce Pack';
   batchNumber?: string;
   barcode?: string;

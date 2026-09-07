@@ -73,6 +73,16 @@ const LEGAL_METROLOGY_RULES_2011 = [
     penaltySection: 'Section 36(1) read with Rule 9',
     penaltyDescription: 'Fine ranging from ₹25,000 to ₹50,000.',
     remediationAdvice: 'Increase the font size of quantity/MRP declarations to meet the minimum height table in the First Schedule for the package\'s display area.'
+  },
+  {
+    id: 'LMPC_6_11_USP',
+    clause: 'Rule 6(11)',
+    title: 'Unit Sale Price Declaration',
+    mandatoryRequirement: 'The unit sale price in rupees rounded off to the nearest two decimal places shall be declared on every package where the net quantity is more than one unit or specified measure.',
+    statutoryAct: 'Legal Metrology (Packaged Commodities) Amendment Rules, 2022',
+    penaltySection: 'Section 36(1), Legal Metrology Act, 2009',
+    penaltyDescription: 'Fine ranging from ₹25,000 to ₹1,00,000.',
+    remediationAdvice: 'Declare Unit Sale Price rounded to two decimal places per g/kg/ml/l/metre/number on the principal display panel.'
   }
 ];
 
@@ -114,6 +124,12 @@ const FIELD_RULE_MAP = {
     ruleId: 'rule_6_1_g',
     expectedFormat: 'Country of Origin: <country> (mandatory for imported goods)',
     severity: 'LOW'
+  },
+  unit_sale_price: {
+    fieldName: 'Unit Sale Price',
+    ruleId: 'LMPC_6_11_USP',
+    expectedFormat: 'Rs. XX.XX per g / ml / kg / l / unit',
+    severity: 'MEDIUM'
   }
 };
 

@@ -61,6 +61,49 @@ function extractBoundingBox(evidence, imgW, imgH, label, isCompliant) {
   return pxQuadToPercentBox(first.bbox.points, imgW, imgH, label, isCompliant);
 }
 
+const CANONICAL_FRONTEND_CATEGORIES = [
+  'Food & FMCG',
+  'Cosmetics & Personal Care',
+  'Electronics',
+  'Pharmaceuticals & OTC',
+  'Apparel & Textiles',
+  'Commodities & Grains',
+  'General'
+];
+
+const CATEGORY_MAP = {
+  food: 'Food & FMCG',
+  fmcg: 'Food & FMCG',
+  cosmetic: 'Cosmetics & Personal Care',
+  cosmetics: 'Cosmetics & Personal Care',
+  electronics: 'Electronics',
+  medical: 'Pharmaceuticals & OTC',
+  pharmaceutical: 'Pharmaceuticals & OTC',
+  pharmaceuticals: 'Pharmaceuticals & OTC',
+  apparel: 'Apparel & Textiles',
+  textiles: 'Apparel & Textiles',
+  seeds: 'Commodities & Grains',
+  general: 'General'
+};
+
+function normalizeCategory(rawCat) {
+  if (!rawCat || typeof rawCat !== 'string') {
+    return null;
+  }
+  const trimmed = rawCat.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (CANONICAL_FRONTEND_CATEGORIES.includes(trimmed)) {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  if (CATEGORY_MAP[lower]) {
+    return CATEGORY_MAP[lower];
+  }
+  return null;
+}
+
 function adaptPythonReportToScanResult(pythonReport) {
   const overallStatus = pythonReport.overall_decision || "FLAGGED_REVIEW";
   const imgW = pythonReport.image_width_px || 0;
@@ -155,7 +198,7 @@ function adaptPythonReportToScanResult(pythonReport) {
     timestamp: new Date().toISOString(),
     productTitle: null,
     brand: null,
-    category: pythonReport.category || null,
+    category: normalizeCategory(pythonReport.category),
     packType: null,
     batchNumber: null,
     barcode: null,
@@ -177,4 +220,4 @@ function adaptPythonReportToScanResult(pythonReport) {
   };
 }
 
-module.exports = { adaptPythonReportToScanResult };
+module.exports = { adaptPythonReportToScanResult, normalizeCategory, CANONICAL_FRONTEND_CATEGORIES };

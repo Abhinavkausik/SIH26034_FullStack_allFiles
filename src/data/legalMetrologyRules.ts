@@ -87,6 +87,17 @@ export const LEGAL_METROLOGY_RULES_2011: LegalRuleDetail[] = [
     penaltyFineRange: '₹25,000 to ₹50,000',
     standardFormats: ['Package Area 100-500cm²: Font Height >= 2.5mm', 'Package Area > 500cm²: Font Height >= 4.0mm'],
     commonViolations: ['Tiny illegible net quantity or MRP font sizes tucked under folds or seams']
+  },
+  {
+    id: 'LMPC_6_11_USP',
+    clause: 'Rule 6(11)',
+    title: 'Unit Sale Price Declaration',
+    mandatoryRequirement: 'The unit sale price in rupees rounded off to the nearest two decimal places shall be declared on every package where the net quantity is more than one unit or specified measure.',
+    exactStatutoryText: 'The unit sale price in rupees rounded off to the nearest two decimal places shall be declared on every package.',
+    penaltySection: 'Section 36(1), Legal Metrology Act, 2009',
+    penaltyFineRange: '₹25,000 to ₹1,00,000',
+    standardFormats: ['Rs. XX.XX per g / kg / ml / l / unit'],
+    commonViolations: ['Missing Unit Sale Price declaration on multi-unit or non-standard metric packages']
   }
 ];
 
