@@ -18,7 +18,7 @@ function runPythonCompliance(imagePath, options = {}) {
 
     const exe = options.exe || PYTHON_EXECUTABLE;
     const script = options.script || BRIDGE_SCRIPT;
-    const env = { ...process.env, PYTHONPATH: 'D:\\PRIYADIP', ...options.env };
+    const env = { ...process.env, PYTHONPATH: 'D:\\PRIYADIP', GEMINI_API_KEY: process.env.GEMINI_API_KEY, ...options.env };
     const timeout = options.timeout !== undefined ? options.timeout : 60000;
 
     execFile(exe, [script, imagePath], { env, timeout }, (error, stdout, stderr) => {
