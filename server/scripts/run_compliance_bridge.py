@@ -41,7 +41,7 @@ def main():
             normalized_fields=normalized,
             category=cat_result.category,
             sub_category=cat_result.sub_category,
-            warnings=warnings
+            warnings=warnings, is_low_confidence=(cat_result.status == "LOW_CONFIDENCE")
         )
 
         # Attach image dimensions so the Node adapter can convert pixel bboxes
