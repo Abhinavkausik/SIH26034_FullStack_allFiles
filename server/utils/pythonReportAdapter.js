@@ -119,7 +119,14 @@ function resolveRuleMetadata(fieldStr, ruleClause) {
 }
 
 function adaptPythonReportToScanResult(pythonReport) {
-  const overallStatus = pythonReport.overall_decision || "FLAGGED_REVIEW";
+  let overallStatus = pythonReport.overall_decision || "FLAGGED_REVIEW";
+  if (pythonReport.violations && pythonReport.violations.length > 0) {
+    overallStatus = "NON_COMPLIANT";
+  } else if (pythonReport.needs_review && pythonReport.needs_review.length > 0) {
+    overallStatus = "NEEDS_REVIEW";
+  } else if (pythonReport.warnings && pythonReport.warnings.includes("AI_UNAVAILABLE")) {
+    overallStatus = "NEEDS_REVIEW";
+  }
   const imgW = pythonReport.image_width_px || 0;
   const imgH = pythonReport.image_height_px || 0;
 

@@ -388,9 +388,15 @@ Requested Action: Please initiate statutory investigation under Section 36(1) of
                     <span className={`text-xs font-mono font-extrabold px-2 py-0.5 rounded ${
                       scanResult.overallStatus === 'COMPLIANT'
                         ? 'bg-[#E7F5EC] text-[#1B7A43]'
+                        : scanResult.overallStatus === 'NEEDS_REVIEW' || scanResult.overallStatus === 'FLAGGED_REVIEW'
+                        ? 'bg-[#FDF3D8] text-[#B45309]'
                         : 'bg-[#FCEAE8] text-[#B42318]'
                     }`}>
-                      {scanResult.overallStatus === 'COMPLIANT' ? 'GENUINE & COMPLIANT' : 'DEFECTIVE / NON-COMPLIANT'}
+                      {scanResult.overallStatus === 'COMPLIANT'
+                        ? 'GENUINE & COMPLIANT'
+                        : scanResult.overallStatus === 'NEEDS_REVIEW' || scanResult.overallStatus === 'FLAGGED_REVIEW'
+                        ? 'VERIFICATION INCOMPLETE — MANUAL REVIEW REQUIRED'
+                        : 'DEFECTIVE / NON-COMPLIANT'}
                     </span>
                   </div>
                   <h3 className="font-bold text-base text-[#14224A] font-sans mt-1">
@@ -433,6 +439,13 @@ Requested Action: Please initiate statutory investigation under Section 36(1) of
                   <CheckCircle2 className="w-5 h-5 shrink-0" />
                   <span>
                     ✓ This package has verified Maximum Retail Price (MRP inclusive of taxes), standard metric net weight, genuine manufacturing date, and customer care redressal details.
+                  </span>
+                </div>
+              ) : scanResult.overallStatus === 'NEEDS_REVIEW' || scanResult.overallStatus === 'FLAGGED_REVIEW' ? (
+                <div className="p-3 bg-[#FDF3D8] rounded-lg border border-[#B45309]/30 text-xs text-[#B45309] flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 shrink-0" />
+                  <span>
+                    Certain mandatory declarations require physical verification on the packaging label (photo evidence was ambiguous or AI verification was unavailable).
                   </span>
                 </div>
               ) : (

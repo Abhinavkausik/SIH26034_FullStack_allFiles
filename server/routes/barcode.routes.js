@@ -4,8 +4,27 @@ const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
 const db = require('../db');
+const { PYTHON_EXECUTABLE } = require('../utils/pythonBridge');
 
 const router = express.Router();
+
+// Dynamic path discovery for canonical Python repo and local products catalog
+const PYTHON_PROJECT_ROOT = process.env.PYTHON_PROJECT_ROOT ||
+  process.env.PYTHONPATH ||
+  (PYTHON_EXECUTABLE ? path.resolve(path.dirname(PYTHON_EXECUTABLE), '..', '..') : null);
+
+const LOCAL_PRODUCTS_PATH = process.env.LOCAL_PRODUCTS_PATH ||
+  (PYTHON_PROJECT_ROOT ? path.join(PYTHON_PROJECT_ROOT, 'src', 'barcode', 'local_products.json') : null);
+
+// Inspect schema and only add manufacturer column if genuinely absent
+try {
+  const columns = db.pragma('table_info(barcode_lookups)');
+  if (!columns.some(col => col.name === 'manufacturer')) {
+    db.exec('ALTER TABLE barcode_lookups ADD COLUMN manufacturer TEXT');
+  }
+} catch (err) {
+  console.warn('Could not ensure manufacturer column on barcode_lookups:', err.message);
+}
 
 // Very loose EAN-8 / UPC-A / EAN-13 sanity check - reject obvious garbage input
 // without being strict about check-digit validation.
@@ -20,20 +39,48 @@ function normalizeCategory(offCategories) {
 }
 
 /**
- * Looks up a barcode's product identity: local SQLite cache first, then the
- * free/public Open Food Facts database on a cache miss. Shared by both the
- * direct GET /:code lookup and the image-decode endpoint below, so a barcode
- * found via camera, manual entry, or the teammate's OpenCV decoder all get
- * identical product-lookup behaviour.
+ * Fallback to local product database (e.g. src/barcode/local_products.json)
+ */
+function lookupLocalDatabase(code) {
+  if (!LOCAL_PRODUCTS_PATH) return null;
+  try {
+    if (fs.existsSync(LOCAL_PRODUCTS_PATH)) {
+      const localData = JSON.parse(fs.readFileSync(LOCAL_PRODUCTS_PATH, 'utf8'));
+      if (localData && localData[code]) {
+        const item = localData[code];
+        return {
+          found: true,
+          productTitle: item.product_name || null,
+          brand: item.brand || null,
+          manufacturer: item.company || item.manufacturer || null,
+          category: normalizeCategory(item.category),
+          imageUrl: item.image_url || null,
+          source: item.source || 'Local Product Database'
+        };
+      }
+    }
+  } catch (err) {
+    console.warn(`Local product database lookup failed for ${code}:`, err.message);
+  }
+  return null;
+}
+
+/**
+ * Looks up a barcode's product identity:
+ * 1. Positive SQLite cache check (found = 1)
+ * 2. Open Food Facts upstream API
+ * 3. Local Product Database fallback (local_products.json)
+ * 4. Terminal not-found record
  */
 async function lookupBarcodeCode(code) {
   const cached = db.prepare('SELECT * FROM barcode_lookups WHERE code = ?').get(code);
-  if (cached) {
+  if (cached && cached.found) {
     return {
       code,
-      found: !!cached.found,
+      found: true,
       productTitle: cached.productTitle,
       brand: cached.brand,
+      manufacturer: cached.manufacturer || null,
       category: cached.category,
       imageUrl: cached.imageUrl,
       source: cached.source,
@@ -55,15 +102,25 @@ async function lookupBarcodeCode(code) {
           found: true,
           productTitle: data.product.product_name || null,
           brand: data.product.brands ? data.product.brands.split(',')[0].trim() : null,
+          manufacturer: null,
           category: normalizeCategory(data.product.categories),
           imageUrl: data.product.image_url || null,
           source: 'openfoodfacts'
         };
 
         db.prepare(`
-          INSERT INTO barcode_lookups (code, found, productTitle, brand, category, imageUrl, source)
-          VALUES (?, 1, ?, ?, ?, ?, ?)
-        `).run(code, result.productTitle, result.brand, result.category, result.imageUrl, result.source);
+          INSERT INTO barcode_lookups (code, found, productTitle, brand, manufacturer, category, imageUrl, source)
+          VALUES (?, 1, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(code) DO UPDATE SET
+            found = 1,
+            productTitle = excluded.productTitle,
+            brand = excluded.brand,
+            manufacturer = excluded.manufacturer,
+            category = excluded.category,
+            imageUrl = excluded.imageUrl,
+            source = excluded.source,
+            cachedAt = datetime('now')
+        `).run(code, result.productTitle, result.brand, result.manufacturer, result.category, result.imageUrl, result.source);
 
         return { code, ...result, cached: false };
       }
@@ -72,9 +129,32 @@ async function lookupBarcodeCode(code) {
     console.warn(`Barcode lookup upstream failed for ${code}:`, err.message);
   }
 
+  const localMatch = lookupLocalDatabase(code);
+  if (localMatch) {
+    db.prepare(`
+      INSERT INTO barcode_lookups (code, found, productTitle, brand, manufacturer, category, imageUrl, source)
+      VALUES (?, 1, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(code) DO UPDATE SET
+        found = 1,
+        productTitle = excluded.productTitle,
+        brand = excluded.brand,
+        manufacturer = excluded.manufacturer,
+        category = excluded.category,
+        imageUrl = excluded.imageUrl,
+        source = excluded.source,
+        cachedAt = datetime('now')
+    `).run(code, localMatch.productTitle, localMatch.brand, localMatch.manufacturer, localMatch.category, localMatch.imageUrl, localMatch.source);
+
+    return { code, ...localMatch, cached: false };
+  }
+
   db.prepare(`
-    INSERT OR IGNORE INTO barcode_lookups (code, found, source)
+    INSERT INTO barcode_lookups (code, found, source)
     VALUES (?, 0, 'not_found')
+    ON CONFLICT(code) DO UPDATE SET
+      found = 0,
+      source = 'not_found',
+      cachedAt = datetime('now')
   `).run(code);
 
   return {
@@ -82,6 +162,7 @@ async function lookupBarcodeCode(code) {
     found: false,
     productTitle: null,
     brand: null,
+    manufacturer: null,
     category: null,
     imageUrl: null,
     source: null,
@@ -120,7 +201,7 @@ const upload = multer({
 });
 
 const PYTHON_SCRIPT = path.join(__dirname, '..', 'scripts', 'decode_barcode.py');
-const PYTHON_BIN = process.env.PYTHON_BIN || 'python3';
+const PYTHON_BIN = process.env.PYTHON_BIN || PYTHON_EXECUTABLE || 'python3';
 
 /**
  * POST /api/barcode/decode-image

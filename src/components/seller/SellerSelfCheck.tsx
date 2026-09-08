@@ -428,9 +428,15 @@ export const SellerSelfCheck: React.FC<SellerSelfCheckProps> = ({ onOpenRulebook
                       <span className={`text-sm font-mono font-extrabold px-2 py-0.5 rounded ${
                         scanResult.overallStatus === 'COMPLIANT'
                           ? 'bg-[#E7F5EC] text-[#1B7A43]'
+                          : scanResult.overallStatus === 'NEEDS_REVIEW' || scanResult.overallStatus === 'FLAGGED_REVIEW'
+                          ? 'bg-[#FDF3D8] text-[#B45309]'
                           : 'bg-[#FCEAE8] text-[#B42318]'
                       }`}>
-                        {scanResult.overallStatus === 'COMPLIANT' ? 'APPROVED FOR LISTING' : 'LISTING REJECTED'}
+                        {scanResult.overallStatus === 'COMPLIANT'
+                          ? 'APPROVED FOR LISTING'
+                          : scanResult.overallStatus === 'NEEDS_REVIEW' || scanResult.overallStatus === 'FLAGGED_REVIEW'
+                          ? 'MANUAL REVIEW REQUIRED'
+                          : 'LISTING REJECTED'}
                       </span>
                     </div>
 
@@ -476,13 +482,17 @@ export const SellerSelfCheck: React.FC<SellerSelfCheckProps> = ({ onOpenRulebook
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {scanResult.checkedFields.map((field) => {
-                    const isPass = field.isPresent && !field.isMalformed;
+                    const isPass = field.status === 'FOUND' || (field.isPresent && !field.isMalformed && field.status !== 'AI_UNAVAILABLE');
+                    const isUnavailable = field.status === 'AI_UNAVAILABLE';
+                    const isReview = field.status === 'LOW_CONFIDENCE' || isUnavailable;
                     return (
                       <div
                         key={field.fieldId}
                         className={`p-3 rounded-lg border text-xs transition-all ${
                           isPass
                             ? 'bg-[#E7F5EC]/40 border-[#1B7A43]/30'
+                            : isReview
+                            ? 'bg-[#FDF3D8]/60 border-[#B45309]/40'
                             : 'bg-[#FCEAE8]/50 border-[#B42318]/40'
                         }`}
                       >
@@ -490,15 +500,25 @@ export const SellerSelfCheck: React.FC<SellerSelfCheckProps> = ({ onOpenRulebook
                           <div className="flex items-center gap-1.5">
                             {isPass ? (
                               <CheckCircle2 className="w-4 h-4 text-[#1B7A43] shrink-0" />
+                            ) : isReview ? (
+                              <AlertTriangle className="w-4 h-4 text-[#B45309] shrink-0" />
                             ) : (
                               <AlertTriangle className="w-4 h-4 text-[#B42318] shrink-0" />
                             )}
                             <strong className="text-[#14224A] text-[11px] font-sans">{field.fieldName}</strong>
                           </div>
                           <span className={`text-[9.5px] font-mono font-bold px-1.5 py-0.2 rounded ${
-                            isPass ? 'bg-[#1B7A43] text-white' : 'bg-[#B42318] text-white'
+                            isPass
+                              ? 'bg-[#1B7A43] text-white'
+                              : isUnavailable
+                              ? 'bg-[#B45309] text-white'
+                              : isReview
+                              ? 'bg-[#B45309] text-white'
+                              : field.isPresent
+                              ? 'bg-[#B42318] text-white'
+                              : 'bg-[#B42318] text-white'
                           }`}>
-                            {isPass ? 'OK' : field.isPresent ? 'MALFORMED' : 'MISSING'}
+                            {isPass ? 'OK' : isUnavailable ? 'AI UNAVAILABLE' : field.isPresent ? 'MALFORMED' : field.status === 'LOW_CONFIDENCE' ? 'UNVERIFIED' : 'MISSING'}
                           </span>
                         </div>
 
@@ -506,8 +526,8 @@ export const SellerSelfCheck: React.FC<SellerSelfCheckProps> = ({ onOpenRulebook
                           {field.explanation}
                         </p>
 
-                        {!isPass && (
-                          <div className="mt-1.5 ml-5 text-[10px] font-mono text-[#B42318]">
+                        {!isPass && field.expectedFormat && (
+                          <div className={`mt-1.5 ml-5 text-[10px] font-mono ${isReview ? 'text-[#B45309]' : 'text-[#B42318]'}`}>
                             Standard: {field.expectedFormat}
                           </div>
                         )}
@@ -548,6 +568,20 @@ export const SellerSelfCheck: React.FC<SellerSelfCheckProps> = ({ onOpenRulebook
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              ) : scanResult.overallStatus === 'NEEDS_REVIEW' || scanResult.overallStatus === 'FLAGGED_REVIEW' ? (
+                <div className="p-4 bg-[#FDF3D8] rounded-xl border border-[#B45309]/40 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#B45309] text-white flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-heading font-bold text-sm text-[#B45309]">
+                      Manual Compliance Review Required
+                    </h4>
+                    <p className="text-xs text-[#14224A]">
+                      Certain mandatory declarations could not be conclusively verified from this label photo (evidence was ambiguous or AI verification was unavailable). Please review the unverified declarations manually before listing.
+                    </p>
                   </div>
                 </div>
               ) : (

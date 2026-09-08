@@ -7,7 +7,7 @@ export type MandatoryFieldId =
   | 'country_of_origin'
   | 'unit_sale_price';
 
-export type ComplianceStatus = 'COMPLIANT' | 'NON_COMPLIANT' | 'FLAGGED_REVIEW';
+export type ComplianceStatus = 'COMPLIANT' | 'NON_COMPLIANT' | 'FLAGGED_REVIEW' | 'NEEDS_REVIEW';
 
 export type SeverityLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 

@@ -18,7 +18,7 @@ export const StampBadge: React.FC<StampBadgeProps> = ({
 }) => {
   const isPass = status === 'COMPLIANT';
   const isFail = status === 'NON_COMPLIANT';
-  const isPending = status === 'FLAGGED_REVIEW' || status === 'INSPECTING';
+  const isPending = status === 'FLAGGED_REVIEW' || status === 'INSPECTING' || status === 'NEEDS_REVIEW';
 
   const sizeClasses = {
     sm: 'w-20 h-20 text-[8px]',
@@ -34,7 +34,7 @@ export const StampBadge: React.FC<StampBadgeProps> = ({
     : 'text-[#B45309] border-[#B45309] bg-[#B45309]/5 shadow-[0_0_0_1px_rgba(217,143,43,0.2)]';
 
   const defaultTop = isPass ? 'LEGAL METROLOGY' : isFail ? 'STATUTORY NOTICE' : 'VERIFICATION';
-  const defaultCenter = customText || (isPass ? 'COMPLIANT' : isFail ? 'REJECTED' : 'INSPECTING');
+  const defaultCenter = customText || (isPass ? 'COMPLIANT' : isFail ? 'REJECTED' : status === 'NEEDS_REVIEW' || status === 'FLAGGED_REVIEW' ? 'NEEDS REVIEW' : 'INSPECTING');
   const defaultBottom = isPass ? 'LMPC 2011 PASSED' : isFail ? 'SEC 36 VIOLATION' : 'AUDIT PENDING';
 
   return (
