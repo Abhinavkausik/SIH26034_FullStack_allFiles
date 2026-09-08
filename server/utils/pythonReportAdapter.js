@@ -224,15 +224,17 @@ function adaptPythonReportToScanResult(pythonReport) {
     }
   }
 
+  const pi = pythonReport.product_intelligence || {};
+
   return {
     id: `LM-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    productTitle: null,
-    brand: null,
+    productTitle: pi.product_name || null,
+    brand: pi.brand || null,
     category: normalizeCategory(pythonReport.category),
     packType: null,
     batchNumber: null,
-    barcode: null,
+    barcode: pi.barcode || null,
     imageUrl: "",
     overallStatus,
     complianceScore: null,

@@ -57,10 +57,24 @@ def main():
         except Exception:
             pass  # Non-fatal: Node adapter will omit bbox when dimensions absent
 
+        pi = {
+            "barcode": structured_data.fields.barcode.extracted_value if structured_data.fields.barcode.status == "FOUND" else None,
+            "product_name": structured_data.fields.product_name.extracted_value if structured_data.fields.product_name.status == "FOUND" else None,
+            "manufacturer": structured_data.fields.manufacturer.name.extracted_value if structured_data.fields.manufacturer.name.status == "FOUND" else None,
+        }
+
+        if hasattr(structured_data, "product_intelligence") and structured_data.product_intelligence:
+            if "brand" in structured_data.product_intelligence:
+                pi["brand"] = structured_data.product_intelligence["brand"]
+
+
         if isinstance(final_report, dict):
+            final_report["product_intelligence"] = pi
             print(json.dumps(final_report, indent=4))
         else:
-            print(final_report.model_dump_json(indent=4))
+            out_dict = final_report.model_dump()
+            out_dict["product_intelligence"] = pi
+            print(json.dumps(out_dict, indent=4))
 
         sys.exit(0)
     except Exception as e:
