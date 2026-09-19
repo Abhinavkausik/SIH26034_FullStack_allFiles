@@ -6,6 +6,14 @@ coverage/
 *.log
 .env*
 !.env.example
+!server/.env.example
 
+# SQLite runtime journal files
 server/*.db-wal
 server/*.db-shm
+
+# Server runtime uploads, generated reports, and temporary files
+server/uploads/
+server/reports/
+server/tmp/*
+!server/tmp/.gitkeep
