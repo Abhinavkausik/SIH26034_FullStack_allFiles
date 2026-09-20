@@ -5,7 +5,7 @@ const fs = require('fs');
 const PYTHON_EXECUTABLE = process.env.PYTHON_EXECUTABLE || 'D:\\PRIYADIP\\.venv\\Scripts\\python.exe';
 const BRIDGE_SCRIPT = path.join(__dirname, '..', 'scripts', 'run_compliance_bridge.py');
 
-function runPythonCompliance(imagePath, options = {}) {
+function runPythonCompliance(imagePath, rawOutPath = null, options = {}) {
   return new Promise((resolve, reject) => {
     if (!imagePath) {
       return reject(new Error('Image path is required.'));
@@ -33,9 +33,14 @@ function runPythonCompliance(imagePath, options = {}) {
     // Increased from 60 seconds to 180 seconds for CPU PaddleOCR fallback.
     const timeout = options.timeout !== undefined ? options.timeout : 180000;
 
+    const args = [script, imagePath];
+    if (rawOutPath) {
+      args.push('--raw-out', rawOutPath);
+    }
+
     execFile(
       exe,
-      [script, imagePath],
+      args,
       { env, timeout },
       (error, stdout, stderr) => {
         if (error) {
@@ -99,8 +104,59 @@ function runPythonCompliance(imagePath, options = {}) {
   });
 }
 
+const REVIEW_BRIDGE_SCRIPT = path.join(__dirname, '..', 'scripts', 'run_review_bridge.py');
+
+function runPythonReview(rawExtractionPath, overrides, options = {}) {
+  return new Promise((resolve, reject) => {
+    if (!rawExtractionPath) {
+      return reject(new Error('Raw extraction path is required.'));
+    }
+
+    if (!fs.existsSync(rawExtractionPath)) {
+      return reject(new Error('Raw extraction file does not exist.'));
+    }
+
+    const exe = options.exe || process.env.PYTHON_EXECUTABLE || PYTHON_EXECUTABLE;
+    const script = options.script || REVIEW_BRIDGE_SCRIPT;
+
+    const env = {
+      ...process.env,
+      PYTHONPATH: process.env.PYTHONPATH || 'D:\\PRIYADIP',
+      ...options.env
+    };
+
+    const args = [script, rawExtractionPath];
+    if (overrides) {
+      args.push('--overrides', JSON.stringify(overrides));
+    }
+
+    const timeout = options.timeout !== undefined ? options.timeout : 120000;
+
+    execFile(
+      exe,
+      args,
+      { env, timeout },
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error('PYTHON STDERR (Review):', stderr);
+          if (error.killed) return reject(new Error('Python review bridge timeout.'));
+          return reject(new Error(`Python process exited with code ${error.code || 'unknown'}.`));
+        }
+
+        try {
+          const parsed = JSON.parse(stdout.trim());
+          resolve(parsed);
+        } catch (err) {
+          reject(new Error('Invalid JSON output from Python review bridge.'));
+        }
+      }
+    );
+  });
+}
+
 module.exports = {
   runPythonCompliance,
+  runPythonReview,
   PYTHON_EXECUTABLE,
   BRIDGE_SCRIPT
 };

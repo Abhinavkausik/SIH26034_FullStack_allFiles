@@ -7,6 +7,8 @@ import {
   fetchAuthoritySummary, fetchViolationsQueue, takeAction, downloadReport,
   AuthorityScan, AuthoritySummary, ActionStatus
 } from '../../services/authorityApi';
+import { ScanDetailDrawer } from '../regulator/ScanDetailDrawer';
+import { ScanResult } from '../../types';
 
 interface AuthorityPortalProps {
   user: AuthorityUser;
@@ -36,6 +38,7 @@ export const AuthorityPortal: React.FC<AuthorityPortalProps> = ({ user, onLogout
   const [error, setError] = useState<string | null>(null);
   const [actingOnId, setActingOnId] = useState<string | null>(null);
   const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
+    const [selectedScanForDrawer, setSelectedScanForDrawer] = useState<ScanResult | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -181,6 +184,13 @@ export const AuthorityPortal: React.FC<AuthorityPortalProps> = ({ user, onLogout
                         <span>View Compliance Document</span>
                       </button>
                     )}
+                      <button
+                        onClick={() => setSelectedScanForDrawer(scan)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-[#D6DEEA] bg-yellow-50 text-yellow-900 hover:bg-yellow-100 transition-colors whitespace-nowrap"
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        <span>Inspect / Officer Review</span>
+                      </button>
                     <button
                       onClick={() => handleDownload(scan)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#14224A] text-[#F3F6FB] hover:bg-[#14224A]/90 transition-colors whitespace-nowrap"
@@ -230,6 +240,14 @@ export const AuthorityPortal: React.FC<AuthorityPortalProps> = ({ user, onLogout
           </div>
         )}
       </div>
+
+      <ScanDetailDrawer
+        scan={selectedScanForDrawer}
+        isOpen={!!selectedScanForDrawer}
+        onClose={() => setSelectedScanForDrawer(null)}
+        onGenerateNotice={() => {}}
+        onOpenRulebookWithClause={() => {}}
+      />
     </div>
   );
 };

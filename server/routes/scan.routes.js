@@ -6,11 +6,13 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { adaptPythonReportToScanResult } = require('../utils/pythonReportAdapter');
 const { generateComplianceReport, shouldGenerateReport } = require('../utils/pdfReport');
-const { runPythonCompliance } = require('../utils/pythonBridge');
+const { runPythonCompliance, runPythonReview } = require('../utils/pythonBridge');
 
 const router = express.Router();
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+const RAW_EXTRACTIONS_DIR = path.join(__dirname, '..', 'data', 'raw_extractions');
+if (!fs.existsSync(RAW_EXTRACTIONS_DIR)) fs.mkdirSync(RAW_EXTRACTIONS_DIR, { recursive: true });
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -52,9 +54,11 @@ router.post('/scan-label', upload.single('image'), async (req, res) => {
       }
     }
 
+    const id = `LM-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const rawOutPath = path.join(RAW_EXTRACTIONS_DIR, `${id}.json`);
     let parsedReport;
     try {
-      parsedReport = await runPythonCompliance(req.file.path);
+      parsedReport = await runPythonCompliance(req.file.path, rawOutPath);
     } catch (e) {
       console.error('Python bridge error:', e.message);
       return res.status(500).json({ error: 'Internal pipeline error during compliance analysis.' });
@@ -62,7 +66,7 @@ router.post('/scan-label', upload.single('image'), async (req, res) => {
 
     const result = adaptPythonReportToScanResult(parsedReport);
 
-    const id = `LM-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    // id generated earlier
     const timestamp = new Date().toISOString();
     const imageUrl = `/uploads/${req.file.filename}`;
     const submittedBy = ['seller', 'consumer', 'authority'].includes(body.submittedBy) ? body.submittedBy : 'consumer';
@@ -120,6 +124,66 @@ router.post('/scan-label', upload.single('image'), async (req, res) => {
   }
 });
 
+
+
+router.post('/scan-label/:id/review', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const fieldOverrides = body.field_overrides || {};
+
+    const existingScan = db.prepare('SELECT * FROM scans WHERE id = ?').get(id);
+    if (!existingScan) return res.status(404).json({ error: 'Scan not found.' });
+
+    const rawOutPath = path.join(RAW_EXTRACTIONS_DIR, `${id}.json`);
+
+    let parsedReport;
+    try {
+      parsedReport = await runPythonReview(rawOutPath, fieldOverrides);
+    } catch (e) {
+      console.error('Python review bridge error:', e.message);
+      return res.status(500).json({ error: 'Internal pipeline error during review processing.' });
+    }
+
+    const result = adaptPythonReportToScanResult(parsedReport);
+
+    // Keep original values where applicable, update with new report
+    const scanRow = {
+      ...existingScan,
+      productTitle: result.productTitle || existingScan.productTitle,
+      brand: result.brand || existingScan.brand,
+      category: result.category || existingScan.category,
+      overallStatus: result.overallStatus,
+      complianceScore: result.complianceScore,
+      checkedFields: JSON.stringify(result.checkedFields),
+      violations: JSON.stringify(result.violations),
+      inspectorNotes: result.inspectorNotes || existingScan.inspectorNotes,
+      estimatedStatutoryFine: result.estimatedStatutoryFine || existingScan.estimatedStatutoryFine,
+      actionStatus: 'REVIEWED'
+    };
+
+    db.prepare(`
+      UPDATE scans SET
+        productTitle = @productTitle, brand = @brand, category = @category,
+        overallStatus = @overallStatus, complianceScore = @complianceScore,
+        checkedFields = @checkedFields, violations = @violations,
+        inspectorNotes = @inspectorNotes, estimatedStatutoryFine = @estimatedStatutoryFine,
+        actionStatus = @actionStatus
+      WHERE id = @id
+    `).run(scanRow);
+
+    if (shouldGenerateReport(result.overallStatus)) {
+      const reportPath = generateComplianceReport(scanRow);
+      db.prepare('UPDATE scans SET reportPath = ? WHERE id = ?').run(reportPath, id);
+      scanRow.reportPath = reportPath;
+    }
+
+    res.status(200).json(hydrateScan(scanRow));
+  } catch (err) {
+    console.error('Error in POST /scan-label/:id/review:', err);
+    res.status(500).json({ error: 'Failed to process the review. Please try again.' });
+  }
+});
 router.get('/scan-label/:id', (req, res) => {
   const row = db.prepare('SELECT * FROM scans WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Scan not found.' });

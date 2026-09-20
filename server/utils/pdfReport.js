@@ -6,7 +6,7 @@ const REPORTS_DIR = path.join(__dirname, '..', 'reports');
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
 function shouldGenerateReport(status) {
-  return status === 'NON_COMPLIANT' || status === 'FLAGGED_REVIEW' || status === 'NEEDS_REVIEW';
+  return status === 'NON_COMPLIANT' || status === 'FLAGGED_REVIEW' || status === 'NEEDS_REVIEW' || status === 'COMPLIANT';
 }
 
 function formatComplianceScore(score) {

@@ -45,6 +45,8 @@ export interface FieldComplianceResult {
   isPresent: boolean;
   isMalformed: boolean;
   detectedText?: string;
+  originalText?: string;
+  officerOverride?: string;
   expectedFormat: string;
   explanation: string;
   severity: SeverityLevel;

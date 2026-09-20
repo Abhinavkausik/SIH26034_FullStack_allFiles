@@ -2,12 +2,14 @@ import sys
 import os
 import json
 
+import argparse
 def main():
-    if len(sys.argv) != 2:
-        sys.stderr.write("Usage: python run_compliance_bridge.py <image_path>\n")
-        sys.exit(1)
-
-    image_path = sys.argv[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("image_path")
+    parser.add_argument("--raw-out", dest="raw_out", help="Path to save raw JSON extraction")
+    args = parser.parse_args()
+    image_path = args.image_path
+    raw_out = args.raw_out
     if not os.path.exists(image_path):
         sys.stderr.write(f"Image not found: {image_path}\n")
         sys.exit(1)
@@ -29,6 +31,14 @@ def main():
         pipeline = OCRPipeline()
         json_out = pipeline.process_image(image_path, save_debug=False)
         structured_data = StructuredExtractionResult.model_validate_json(json_out)
+
+        if raw_out:
+            try:
+                os.makedirs(os.path.dirname(raw_out), exist_ok=True)
+                with open(raw_out, "w", encoding="utf-8") as f:
+                    f.write(json_out)
+            except Exception as e:
+                sys.stderr.write(f"Failed to save raw output: {e}\n")
 
         normalized = normalize_product_fields(structured_data.fields)
         cat_result = classify_category(normalized)

@@ -177,7 +177,9 @@ function adaptPythonReportToScanResult(pythonReport) {
       explanation: obj.message || "",
       severity: ruleMeta ? ruleMeta.severity : "MEDIUM",
       boundingBox: boundingBox || undefined,
-      detectedText: obj.extracted_value != null ? String(obj.extracted_value) : undefined
+      detectedText: obj.extracted_value != null ? String(obj.extracted_value) : undefined,
+      originalText: obj.original_value != null ? String(obj.original_value) : undefined,
+      officerOverride: obj.officer_override != null ? String(obj.officer_override) : undefined
     };
   };
 

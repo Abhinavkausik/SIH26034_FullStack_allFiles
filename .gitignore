@@ -17,3 +17,5 @@ server/uploads/
 server/reports/
 server/tmp/*
 !server/tmp/.gitkeep
+
+server/data/raw_extractions/

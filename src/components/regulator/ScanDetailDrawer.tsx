@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { X, ShieldAlert, CheckCircle2, AlertCircle, FileText, ExternalLink, Scale, Sparkles, Download } from 'lucide-react';
 import { ScanResult, FieldComplianceResult, RuleClauseViolation } from '../../types';
 import { StampBadge } from '../common/StampBadge';
+import { submitScanReview } from '../../services/complianceApi';
+import { downloadReport } from '../../services/authorityApi';
 
 interface ScanDetailDrawerProps {
   scan: ScanResult | null;
@@ -9,6 +11,7 @@ interface ScanDetailDrawerProps {
   onClose: () => void;
   onGenerateNotice: (scan: ScanResult) => void;
   onOpenRulebookWithClause: (clauseId: string) => void;
+  onOpenDocument?: (scanId: string) => void;
 }
 
 export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
@@ -16,12 +19,49 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
   isOpen,
   onClose,
   onGenerateNotice,
-  onOpenRulebookWithClause
+  onOpenRulebookWithClause,
+  onOpenDocument
 }) => {
   const [selectedField, setSelectedField] = useState<FieldComplianceResult | null>(null);
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentScan, setCurrentScan] = useState<ScanResult | null>(null);
 
-  if (!isOpen || !scan) return null;
+  React.useEffect(() => {
+    setCurrentScan(scan);
+    setOverrides({});
+  }, [scan]);
+
+  const handleReviewSubmit = async () => {
+    if (Object.keys(overrides).length === 0 || !currentScan) return;
+    setIsSubmitting(true);
+    try {
+      const updatedScan = await submitScanReview(currentScan.id, overrides);
+      setCurrentScan(updatedScan); // Update local scan state
+      setOverrides({}); // Clear overrides after successful submit
+    } catch (e: any) {
+      alert(e.message || e);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!currentScan) return;
+    try {
+      await downloadReport(currentScan.id, currentScan.productTitle);
+    } catch (e: any) {
+      alert(e.message || e);
+    }
+  };
+
+  const handleCancel = () => {
+    setOverrides({});
+    onClose();
+  };
+
+  if (!isOpen || !currentScan) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs">
@@ -34,26 +74,39 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-[#B45309] font-bold">CASE AUDIT: {scan.id}</span>
+                <span className="font-mono text-xs text-[#B45309] font-bold">CASE AUDIT: {currentScan.id}</span>
                 <span className="text-white/40">•</span>
-                <span className="text-xs font-mono text-[#8B99B0]">{scan.category}</span>
+                <span className="text-xs font-mono text-[#8B99B0]">{currentScan.category}</span>
               </div>
               <h2 className="text-base sm:text-lg font-bold font-heading text-white">
-                {scan.productTitle}
+                {currentScan.productTitle}
               </h2>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+
+            {Object.keys(overrides).length > 0 && (
+              <span className="text-yellow-400 text-xs font-mono font-bold px-2 animate-pulse">Unsaved changes!</span>
+            )}
+            {Object.keys(overrides).length > 0 && (
+                <button
+                onClick={handleReviewSubmit}
+                disabled={isSubmitting}
+                className="px-4 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white font-mono font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-lg"
+              >
+                <span>{isSubmitting ? 'Saving...' : 'Save / Submit Review'}</span>
+              </button>
+            )}
             <button
-              onClick={() => onGenerateNotice(scan)}
+              onClick={() => onGenerateNotice(currentScan)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#B42318] hover:bg-[#B42318]/90 text-white font-mono text-xs font-bold rounded transition-colors"
             >
               <FileText className="w-3.5 h-3.5" />
               <span>Draft Sec 36 Notice</span>
             </button>
             <button
-              onClick={onClose}
+              onClick={handleCancel}
               className="p-1.5 rounded-lg text-[#8B99B0] hover:text-[#F3F6FB] hover:bg-white/10 transition-colors"
             >
               <X className="w-5 h-5" />
@@ -67,7 +120,7 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
           <div className="bg-white p-4 rounded-xl border border-[#D6DEEA] flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
             <div className="flex items-center gap-4 w-full md:w-auto">
               <StampBadge
-                status={scan.overallStatus}
+                status={currentScan.overallStatus}
                 size="md"
                 rotation={-4}
               />
@@ -75,16 +128,16 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono font-bold uppercase text-[#5B6B84]">Compliance Verdict:</span>
                   <span className={`text-xs font-mono font-extrabold px-2 py-0.5 rounded ${
-                    scan.overallStatus === 'COMPLIANT' ? 'bg-[#E7F5EC] text-[#1B7A43]' : 'bg-[#FCEAE8] text-[#B42318]'
+                    currentScan.overallStatus === 'COMPLIANT' ? 'bg-[#E7F5EC] text-[#1B7A43]' : 'bg-[#FCEAE8] text-[#B42318]'
                   }`}>
-                    {scan.overallStatus} ({scan.complianceScore}/100)
+                    {currentScan.overallStatus} ({currentScan.complianceScore}/100)
                   </span>
                 </div>
                 <div className="text-xs text-[#14224A] font-medium mt-1">
-                  Brand / Packer: <strong>{scan.brand}</strong> | Pack Type: <strong>{scan.packType}</strong>
+                  Brand / Packer: <strong>{currentScan.brand}</strong> | Pack Type: <strong>{currentScan.packType}</strong>
                 </div>
                 <div className="text-[11px] font-mono text-[#5B6B84] mt-0.5">
-                  Batch: {scan.batchNumber || 'N/A'} | Barcode: {scan.barcode || 'N/A'}
+                  Batch: {currentScan.batchNumber || 'N/A'} | Barcode: {currentScan.barcode || 'N/A'}
                 </div>
               </div>
             </div>
@@ -92,10 +145,10 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
             <div className="flex flex-col items-end gap-1 text-right w-full md:w-auto border-t md:border-t-0 pt-2 md:pt-0 border-[#E3E9F2]">
               <span className="text-[10px] font-mono text-[#5B6B84] uppercase">ESTIMATED STATUTORY PENALTY</span>
               <strong className="text-sm font-mono text-[#B42318] bg-[#FCEAE8] px-2.5 py-1 rounded border border-[#B42318]/20">
-                {scan.estimatedStatutoryFine}
+                {currentScan.estimatedStatutoryFine}
               </strong>
               <span className="text-[10px] text-[#5B6B84] font-mono">
-                Audit Ref: {scan.inspectionMemoNumber || 'AUTO-AUDIT'}
+                Audit Ref: {currentScan.inspectionMemoNumber || 'AUTO-AUDIT'}
               </span>
             </div>
           </div>
@@ -118,13 +171,13 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
 
               <div className="relative bg-black/90 rounded-xl overflow-hidden border-2 border-[#14224A] shadow-md flex items-center justify-center min-h-[320px]">
                 <img
-                  src={scan.imageUrl}
-                  alt={scan.productTitle}
+                  src={currentScan.imageUrl}
+                  alt={currentScan.productTitle}
                   className="w-full h-auto max-h-[380px] object-contain"
                 />
 
                 {/* Bounding Box Overlays */}
-                {showBoundingBoxes && scan.checkedFields.map((field) => {
+                {showBoundingBoxes && currentScan.checkedFields.map((field) => {
                   if (!field.boundingBox) return null;
                   const box = field.boundingBox;
                   const isSelected = selectedField?.fieldId === field.fieldId;
@@ -171,12 +224,12 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
                   <span>Mandatory Declaration Audit Ledger (Rule 6)</span>
                 </h3>
                 <span className="text-xs font-mono text-[#5B6B84]">
-                  {scan.checkedFields.filter(f => f.isPresent && !f.isMalformed).length} of 6 Declarations Compliant
+                  {currentScan.checkedFields.filter(f => f.isPresent && !f.isMalformed).length} of 6 Declarations Compliant
                 </span>
               </div>
 
               <div className="space-y-2.5">
-                {scan.checkedFields.map((field) => {
+                {currentScan.checkedFields.map((field) => {
                   const isPass = field.isPresent && !field.isMalformed;
                   const isSelected = selectedField?.fieldId === field.fieldId;
 
@@ -224,12 +277,42 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
                         {field.explanation}
                       </p>
 
-                      {field.detectedText && (
+
+                      {field.detectedText && !field.officerOverride && (
                         <div className="mt-2 ml-6 p-2 bg-[#EEF2F8] rounded text-[11px] font-mono text-[#14224A] border border-[#E3E9F2]">
                           <span className="text-[#5B6B84] block text-[9px] uppercase font-semibold">Detected Text on Package:</span>
                           "{field.detectedText}"
                         </div>
                       )}
+                      {field.officerOverride && (
+                        <div className="mt-2 ml-6 p-2 bg-yellow-50 rounded text-[11px] font-mono text-yellow-900 border border-yellow-200">
+                          <span className="text-yellow-700 block text-[9px] uppercase font-semibold">Officer Override (Effective):</span>
+                          "{field.officerOverride}"
+                          <span className="text-gray-400 block text-[9px] uppercase font-semibold mt-1">Original AI:</span>
+                          <span className="line-through">"{field.originalText}"</span>
+                        </div>
+                      )}
+
+                      {overrides[field.fieldId] !== undefined && !isSelected && (
+                        <div className="mt-2 ml-6 p-2 bg-yellow-50 rounded text-[11px] font-mono text-yellow-900 border border-yellow-300">
+                          <span className="text-yellow-700 block text-[9px] uppercase font-semibold">Unsaved Officer Edit:</span>
+                          "{overrides[field.fieldId]}"
+                        </div>
+                      )}
+
+                      {isSelected && (
+                          <div className="mt-2 ml-6 flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Enter override value..."
+                              className="text-xs px-2 py-1 border border-gray-300 rounded w-full"
+                              value={overrides[field.fieldId] !== undefined ? overrides[field.fieldId] : (field.detectedText || '')}
+                              onChange={(e) => setOverrides({...overrides, [field.fieldId]: e.target.value})}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                      )}
+
 
                       {!isPass && (
                         <div className="mt-2 ml-6 text-[10px] font-mono text-[#B42318] font-medium">
@@ -242,14 +325,14 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
               </div>
 
               {/* Statutory Violations & Remedies Section */}
-              {scan.violations.length > 0 && (
+              {currentScan.violations.length > 0 && (
                 <div className="mt-4 pt-3 border-t border-[#D6DEEA]">
                   <h4 className="font-bold text-xs font-mono text-[#B42318] uppercase mb-2 flex items-center gap-1.5">
                     <ShieldAlert className="w-4 h-4" />
-                    <span>Statutory Penal Sections Charged ({scan.violations.length})</span>
+                    <span>Statutory Penal Sections Charged ({currentScan.violations.length})</span>
                   </h4>
                   <div className="space-y-2">
-                    {scan.violations.map((v, i) => (
+                    {currentScan.violations.map((v, i) => (
                       <div key={i} className="p-3 bg-[#FCEAE8] rounded-lg border border-[#B42318]/30 text-xs">
                         <div className="flex items-center justify-between font-mono font-bold text-[#B42318] mb-1">
                           <span>{v.clauseId}: {v.clauseTitle}</span>
@@ -274,15 +357,47 @@ export const ScanDetailDrawer: React.FC<ScanDetailDrawerProps> = ({
             Audit memo generated under Legal Metrology Act, 2009 Standards
           </div>
           <div className="flex items-center gap-3">
+
+            {Object.keys(overrides).length > 0 && (
+              <span className="text-yellow-600 text-xs font-mono font-bold px-2 animate-pulse">Unsaved changes!</span>
+            )}
+            {Object.keys(overrides).length > 0 && (
+                <button
+                onClick={handleReviewSubmit}
+                disabled={isSubmitting}
+                className="px-4 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white font-mono font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-lg"
+              >
+                <span>{isSubmitting ? 'Saving...' : 'Save / Submit Review'}</span>
+              </button>
+            )}
             <button
-              onClick={() => onGenerateNotice(scan)}
+              onClick={() => onGenerateNotice(currentScan)}
               className="px-4 py-1.5 bg-[#B42318] hover:bg-[#B42318]/90 text-white font-mono font-semibold rounded text-xs transition-colors flex items-center gap-1.5"
             >
               <FileText className="w-3.5 h-3.5" />
               <span>Generate Form-A Inspection Memo</span>
             </button>
+            {onOpenDocument && currentScan.actionStatus === 'REVIEWED' && (
+              <button
+                onClick={() => { onOpenDocument(currentScan.id); onClose(); }}
+                className="px-4 py-1.5 bg-white border border-[#D6DEEA] text-[#14224A] hover:bg-[#EEF2F8] font-mono font-semibold rounded text-xs transition-colors flex items-center gap-1.5"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>View Compliance Document</span>
+              </button>
+            )}
+            {currentScan.actionStatus === 'REVIEWED' && (
+              <button
+                onClick={handleDownload}
+                className="px-4 py-1.5 bg-[#14224A] hover:bg-[#14224A]/90 text-white font-mono font-semibold rounded text-xs transition-colors flex items-center gap-1.5"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Compliance PDF</span>
+              </button>
+            )}
+
             <button
-              onClick={onClose}
+              onClick={handleCancel}
               className="px-4 py-1.5 bg-[#14224A] text-[#F3F6FB] font-semibold rounded text-xs hover:bg-[#14224A]/90"
             >
               Close

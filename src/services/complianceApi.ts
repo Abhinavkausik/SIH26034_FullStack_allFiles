@@ -117,6 +117,31 @@ export async function analyzeProductLabel(
 /**
  * Fetch Regulator Dashboard Analytics
  */
+
+/**
+ * Submit officer review/edit of scan fields.
+ */
+export async function submitScanReview(scanId: string, overrides: Record<string, string>): Promise<ScanResult> {
+  const reachable = await isBackendReachable();
+  if (!reachable) {
+    throw new Error('Backend is not reachable for review submission.');
+  }
+
+  const res = await fetch(`${API_BASE}/scan-label/${scanId}/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field_overrides: overrides }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to submit review');
+  }
+
+  const data = await res.json();
+  return { ...data, imageUrl: data.imageUrl?.startsWith('/') ? `${API_BASE.replace('/api', '')}${data.imageUrl}` : data.imageUrl };
+}
+
 export async function fetchRegulatorAnalytics(): Promise<{
   trends: RegulatorTrendData[];
   topClauses: ClauseStatistic[];
