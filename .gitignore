@@ -1,0 +1,23 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+!server/.env.example
+
+# SQLite runtime journal files
+server/*.db-wal
+server/*.db-shm
+
+# Server runtime uploads, generated reports, and temporary files
+server/uploads/
+server/reports/
+server/tmp/*
+!server/tmp/.gitkeep
+
+# SQLite database file - contains bcrypt hashes and scan/inspection records
+# once the server has been run and seeded. Never commit real data.
+server/*.db
