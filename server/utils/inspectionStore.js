@@ -332,8 +332,19 @@ function getInspection(id) {
     .all(id);
 
   inspection.complaints = db
-    .prepare('SELECT * FROM complaints WHERE inspectionId = ? ORDER BY createdAt DESC')
-    .all(id);
+      .prepare(`
+        SELECT c.*, p.name AS productName, u.name AS assignedAuthorityName
+        FROM complaints c
+        LEFT JOIN products p ON c.productId = p.id
+        LEFT JOIN authority_users u ON c.assignedAuthorityId = u.id
+        WHERE c.inspectionId = ? ORDER BY c.createdAt DESC
+      `)
+      .all(id)
+      .map(c => ({
+        ...c,
+        categoryLabel: c.category,
+        supportingInfo: c.supportingInfo ? JSON.parse(c.supportingInfo) : null
+      }));
 
   inspection.isDemo = !!inspection.isDemo;
 
