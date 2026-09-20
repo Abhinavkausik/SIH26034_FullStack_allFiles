@@ -176,12 +176,17 @@ function adaptPythonReportToScanResult(pythonReport) {
       expectedFormat: ruleMeta ? ruleMeta.expectedFormat : "",
       explanation: obj.message || "",
       severity: ruleMeta ? ruleMeta.severity : "MEDIUM",
-      boundingBox: boundingBox || undefined
+      boundingBox: boundingBox || undefined,
+      detectedText: obj.extracted_value != null ? String(obj.extracted_value) : undefined
     };
   };
 
   (pythonReport.passed_fields || []).forEach(f => {
-    checkedFields.push(createField(f, "FOUND", "Passed"));
+    if (typeof f === 'string') {
+      checkedFields.push(createField(f, "FOUND", "Passed"));
+    } else {
+      checkedFields.push(createObjectField(f, "FOUND"));
+    }
   });
 
   (pythonReport.needs_review || []).forEach(f => {
@@ -193,7 +198,11 @@ function adaptPythonReportToScanResult(pythonReport) {
   });
 
   (pythonReport.not_applicable_fields || []).forEach(f => {
-    checkedFields.push(createField(f, "NOT_APPLICABLE", "Not applicable"));
+    if (typeof f === 'string') {
+      checkedFields.push(createField(f, "NOT_APPLICABLE", "Not applicable"));
+    } else {
+      checkedFields.push(createObjectField(f, "NOT_APPLICABLE"));
+    }
   });
 
   const violations = (pythonReport.violations || []).map(v => {
