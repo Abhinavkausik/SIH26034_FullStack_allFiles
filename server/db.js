@@ -1,5 +1,6 @@
 const path = require('path');
 const Database = require('better-sqlite3');
+const { runMigrations } = require('./migrations');
 
 const DB_PATH = path.join(__dirname, 'lmpc.db');
 const db = new Database(DB_PATH);
@@ -74,5 +75,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_scans_actionStatus ON scans(actionStatus);
   CREATE INDEX IF NOT EXISTS idx_scans_createdAt ON scans(createdAt);
 `);
+
+runMigrations(db);
 
 module.exports = db;

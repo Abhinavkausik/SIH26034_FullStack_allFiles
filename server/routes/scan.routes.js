@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
+const { upsertProduct, resolveActor, recordInspection } = require('../utils/inspectionStore');
 const { adaptPythonReportToScanResult } = require('../utils/pythonReportAdapter');
 const { generateComplianceReport, shouldGenerateReport } = require('../utils/pdfReport');
 const { runPythonCompliance, runPythonReview } = require('../utils/pythonBridge');
@@ -117,7 +118,48 @@ router.post('/scan-label', upload.single('image'), async (req, res) => {
       scanRow.reportPath = reportPath;
     }
 
-    res.status(201).json(hydrateScan(scanRow));
+    // ---- Relational inspection history --------------------------------
+    let inspectionId = null;
+    let priority = null;
+    let priorityReason = null;
+
+    try {
+      const product = upsertProduct({
+        name: scanRow.productTitle,
+        brand: scanRow.brand,
+        barcode: scanRow.barcode,
+        category: scanRow.category,
+        manufacturer: result.manufacturer || null,
+        imageUrl: scanRow.imageUrl
+      });
+
+      const actor = resolveActor({
+        type: submittedBy === 'seller' ? 'SELLER' : 'CONSUMER',
+        deviceToken: req.headers['x-actor-token'] || body.actorToken || null,
+        displayName: body.actorName || body.sellerName || null
+      });
+
+      const inspection = recordInspection({
+        scan: scanRow,
+        result,
+        actor,
+        product
+      });
+
+      inspectionId = inspection.id;
+      priority = inspection.priority;
+      priorityReason = inspection.priorityReason;
+    } catch (err) {
+      console.error('[inspection persistence] failed:', err.message);
+    }
+
+    const finalResponse = hydrateScan(scanRow);
+    if (inspectionId) {
+      finalResponse.inspectionId = inspectionId;
+      finalResponse.priority = priority;
+      finalResponse.priorityReason = priorityReason;
+    }
+    res.status(201).json(finalResponse);
   } catch (err) {
     console.error('Error in POST /scan-label:', err);
     res.status(500).json({ error: 'Failed to process the scan. Please try again.' });
